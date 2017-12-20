@@ -1,4 +1,10 @@
+#ifndef _REFLECT_HH_
+#define _REFLECT_HH_
+
+#include "func_args.hh"
+
 #include <typeinfo>
+#include <type_traits>
 #include <string>
 #include <vector>
 #include <any>
@@ -11,13 +17,6 @@
 // 1, Find a class by its name
 // 2, Find a method by class and method name
 // 3, call a method found by functionality 2
-
-struct NoneType {
-    static NoneType Instance() {
-        static NoneType obj;
-        return obj;
-    }
-};
 
 class WrongCallException
     : public std::exception
@@ -41,6 +40,10 @@ public:
     }
 
     virtual std::any call(std::any that, std::any arg1, std::any arg2) {
+        throw WrongCallException();
+    }
+
+    virtual std::any call(std::any that, std::any arg1, std::any arg2, std::any arg3) {
         throw WrongCallException();
     }
 
@@ -78,21 +81,15 @@ private:
 
 #define g_ClassObjMgr ClassObjMgr::Instance()
 
-// function overload not supported
-// put this monster in a .cc file, for every function you want to 
-#define REGISTER_CLS_FUNC1(className, funcName, type1)      \
+#define _REGISTER_CLS_FUNC_COMMON_BEGIN(className, funcName) \
     class _FuncObj_ ## className ## _ ## funcName           \
         : public FuncObjBase                                \
     {                                                       \
         friend class _ClassObj_ ## className;               \
     public:                                                 \
-        std::any call(std::any that, std::any arg1) override    \
-        {                                                   \
-            className obj = std::any_cast<className>(that); \
-            type1 s1 = std::any_cast<type1>(arg1);          \
-            return obj.funcName (s1);                       \
-        }                                                   \
-                                                            \
+
+
+#define _REGISTER_CLS_FUNC_COMMON_END(className, funcName)  \
         const char *get_func_name() override {              \
             return func_name;                               \
         }                                                   \
@@ -110,6 +107,51 @@ private:
                                                             \
     _FuncObj_ ## className ## _ ## funcName                 \
     _FuncObj_ ## className ## _ ## funcName :: obj_;
+
+#define REGISTER_CLS_FUNC0(className, funcName)             \
+    _REGISTER_CLS_FUNC_COMMON_BEGIN(className, funcName)    \
+        std::any call(std::any that) override               \
+        {                                                   \
+            className &obj = std::any_cast<className&>(that);   \
+            return type_utility::invoke_and_convert_void(&className::funcName, obj);    \
+        }                                                   \
+    _REGISTER_CLS_FUNC_COMMON_END(className, funcName)
+
+
+#define REGISTER_CLS_FUNC1(className, funcName, type1)      \
+    _REGISTER_CLS_FUNC_COMMON_BEGIN(className, funcName)    \
+        std::any call(std::any that, std::any arg1) override    \
+        {                                                   \
+            className &obj = std::any_cast<className&>(that); \
+            type1 s1 = std::any_cast<type1>(arg1);          \
+            return type_utility::invoke_and_convert_void(&className::funcName, obj, s1);    \
+        }                                                   \
+    _REGISTER_CLS_FUNC_COMMON_END(className, funcName)
+
+
+#define REGISTER_CLS_FUNC2(className, funcName, type1, type2)   \
+    _REGISTER_CLS_FUNC_COMMON_BEGIN(className, funcName)    \
+        std::any call(std::any that, std::any arg1, std::any arg2) override    \
+        {                                                   \
+            className &obj = std::any_cast<className&>(that); \
+            type1 s1 = std::any_cast<type1>(arg1);          \
+            type2 s2 = std::any_cast<type2>(arg2);          \
+            return type_utility::invoke_and_convert_void(&className::funcName, obj, s1, s2);    \
+        }                                                   \
+    _REGISTER_CLS_FUNC_COMMON_END(className, funcName)
+
+
+#define REGISTER_CLS_FUNC3(className, funcName, type1, type2, type3)    \
+    _REGISTER_CLS_FUNC_COMMON_BEGIN(className, funcName)    \
+        std::any call(std::any that, std::any arg1) override    \
+        {                                                   \
+            className &obj = std::any_cast<className&>(that);   \
+            type1 s1 = std::any_cast<type1>(arg1);          \
+            type2 s2 = std::any_cast<type2>(arg2);          \
+            type3 s3 = std::any_cast<type3>(arg3);          \
+            return type_utility::invoke_and_convert_void(&className::funcName, obj, s1, s2, s3);    \
+        }                                                   \
+    _REGISTER_CLS_FUNC_COMMON_END(className, funcName)
 
 
 // put this in a .hh file
@@ -158,35 +200,5 @@ private:
     _ClassObj_ ## className _ClassObj_ ## className :: obj_;
 
 
-#include <iostream>
+#endif /* _REFLECT_HH_ */
 
-class Pluser {
-public:
-    int addone(int a) {
-        std::cout << a << " addone called.\n";
-        return a + 1;
-    }
-};
-
-REGISTER_CLS(Pluser);
-
-REGISTER_CLS_CREATE_INSTANCE(Pluser);
-
-REGISTER_CLS_FUNC1(Pluser, addone, int);
-
-
-void test() {
-    ClassObjBase *cls = g_ClassObjMgr.getClass("Pluser");
-    std::cout << cls->get_class_name() << "\n";
-
-    FuncObjBase *func = cls->getFunc("addone");
-
-    assert(func);
-
-    func->call(cls->createInstance(), 23);
-
-}
-
-int main() {
-    test();
-}
